@@ -2,4 +2,4 @@
 
 열역학 제2법칙 탐구 활동용 웹 앱입니다. 두 상자 공 옮기기, 경우의 수, 주사위 상자, 열의 이동 활동을 담고 있습니다.
 
-바로 열기: https://hbhgger1126-ops.github.io/entropy-lab/
+바로 열기: https://hbhgger.github.io/entropy-lab/
