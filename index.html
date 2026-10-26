@@ -258,11 +258,7 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-to
 
   <h3>학급 결과와 비교하기</h3>
   <div id="onlineBox" hidden>
-    <p class="small">우리 짝의 결과를 제출하면 학급 합계가 자동으로 모여요. 이름은 받지 않고 반과 짝 번호만 저장합니다.</p>
-    <div class="formrow">
-      <label>반<input id="clsInput" type="text" maxlength="20" placeholder="예: 2-6" autocomplete="off"></label>
-      <label>짝 번호<input id="pairInput" type="number" min="1" max="40" inputmode="numeric" placeholder="예: 3"></label>
-    </div>
+    <p class="small">우리 짝의 결과를 제출하면 학급 합계가 자동으로 모여요. 이름이나 번호는 받지 않아요.</p>
     <p class="seglabel">우리 짝의 횟수(활동지 ‘활동 1 결과 정리’ 표)</p>
     <div class="inputs" id="myInputs"></div>
     <p class="sel" id="mySum">합계 0 / 20</p>
@@ -286,10 +282,10 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-to
   </div>
   <details class="teacher" id="teacherBox" hidden>
     <summary>교사용: 수업이 끝나면 결과 지우기</summary>
-    <p class="small">위에 입력된 반의 제출 결과를 지웁니다. 지운 결과는 구글 시트의 ‘보관’ 탭으로 옮겨져서 나중에도 볼 수 있어요.</p>
+    <p class="small">지금까지 제출된 결과를 모두 지웁니다. 지운 결과는 구글 시트의 ‘보관’ 탭으로 옮겨져서 나중에도 볼 수 있어요.</p>
     <div class="formrow">
       <label>교사용 비밀번호<input id="pinInput" type="password" autocomplete="off"></label>
-      <button class="btn danger" id="resetBtn">이 반 결과 지우기</button>
+      <button class="btn danger" id="resetBtn">결과 모두 지우기</button>
     </div>
     <p class="sel" id="resetMsg" aria-live="polite"></p>
   </details>
@@ -655,20 +651,21 @@ function makeInputs(box,arr,onChange){
 /* ---------- 학급 결과 자동 집계(앱스 스크립트) ---------- */
 const store={get:k=>{try{return localStorage.getItem(k);}catch(e){return null;}},set:(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}}};
 count.online=false;count.server=null;count.my=[0,0,0,0,0];
-const clsVal=()=>$('clsInput').value.trim();
+/* 이 기기를 구분하는 임의의 번호: 같은 기기에서 다시 제출하면 새 값으로 바뀐다(이름·번호는 받지 않음) */
+const deviceId=(()=>{let id=store.get('entropy-device');
+  if(!id||!/^[A-Za-z0-9-]{4,40}$/.test(id)){id='d-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);store.set('entropy-device',id);}
+  return id;})();
+function isTeacherMode(){
+  try{if(new URLSearchParams(location.search).has('teacher'))return true;}catch(e){}
+  return location.hash==='#teacher'||/teacher/.test(location.search);
+}
 function onlineInit(){
   count.online=true;
   $('onlineBox').hidden=false;$('manualBox').hidden=true;$('onlineStatus').hidden=false;
-  let q=null;try{q=new URLSearchParams(location.search).get('class');}catch(e){}
-  $('clsInput').value=(q||store.get('entropy-cls')||'').slice(0,20);
-  $('pairInput').value=store.get('entropy-pair')||'';
   makeInputs($('myInputs'),count.my,mySumRender);mySumRender();
-  $('clsInput').addEventListener('change',()=>{store.set('entropy-cls',clsVal());count.server=null;fetchTotals();});
-  $('pairInput').addEventListener('change',()=>store.set('entropy-pair',$('pairInput').value));
   $('submitBtn').addEventListener('click',submitMine);
   $('refreshBtn').addEventListener('click',()=>fetchTotals(true));
-  let isTeacher=false;try{isTeacher=new URLSearchParams(location.search).has('teacher');}catch(e){}
-  if(isTeacher){$('teacherBox').hidden=false;$('resetBtn').addEventListener('click',resetClass);}
+  if(isTeacherMode()){$('teacherBox').hidden=false;$('resetBtn').addEventListener('click',resetAll);}
   setInterval(()=>{if(!document.hidden&&$('panel-count').classList.contains('active'))fetchTotals();},5000);
 }
 function mySumRender(){
@@ -678,14 +675,12 @@ function mySumRender(){
 let fetching=false;
 async function fetchTotals(manual){
   if(!count.online||fetching)return;
-  const cls=clsVal();
-  if(!cls){$('pairsLine').textContent='반을 입력하면 학급 결과를 불러와요.';count.server=null;classRender();return;}
   fetching=true;if(manual)$('pairsLine').textContent='불러오는 중…';
   try{
-    const r=await fetch(SHEET_API+'?cls='+encodeURIComponent(cls),{cache:'no-store'});
+    const r=await fetch(SHEET_API,{cache:'no-store'});
     const d=await r.json();
-    if(d.ok&&clsVal()===cls){count.server=d;pairsRender();}
-    else if(!d.ok)$('pairsLine').textContent=d.error||'학급 결과를 불러오지 못했어요.';
+    if(d.ok){count.server=d;pairsRender();}
+    else $('pairsLine').textContent=d.error||'학급 결과를 불러오지 못했어요.';
   }catch(e){
     $('pairsLine').textContent='학급 결과를 불러오지 못했어요. 인터넷 연결을 확인하세요.';
   }finally{fetching=false;}
@@ -693,36 +688,34 @@ async function fetchTotals(manual){
 }
 function pairsRender(){
   const d=count.server;
-  $('pairsLine').textContent=d&&d.pairs.length?d.cls+' 제출한 짝: '+d.pairs.join(', ')+'번 (총 '+d.pairs.length+'쌍)':'아직 제출한 짝이 없어요.';
+  $('pairsLine').textContent=d&&d.count?'지금까지 '+d.count+'쌍이 제출했어요.':'아직 제출한 짝이 없어요.';
 }
-async function resetClass(){
-  const msg=$('resetMsg'),cls=clsVal(),pin=$('pinInput').value;
+async function postJSON(body){
+  const r=await fetch(SHEET_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+  return r.json();
+}
+async function resetAll(){
+  const msg=$('resetMsg'),pin=$('pinInput').value;
   const say=(txt,cl)=>{msg.textContent=txt;msg.className='sel '+(cl||'');};
-  if(!cls)return say('지울 반을 위의 반 칸에 입력해 주세요.','warn');
   if(!pin)return say('교사용 비밀번호를 입력해 주세요.','warn');
-  if(!confirm(cls+' 반의 제출 결과를 모두 지울까요?\n지운 결과는 구글 시트의 보관 탭으로 옮겨집니다.'))return;
+  if(!confirm('제출된 결과를 모두 지울까요?\n지운 결과는 구글 시트의 보관 탭으로 옮겨집니다.'))return;
   const btn=$('resetBtn');btn.disabled=true;say('지우는 중…');
   try{
-    const r=await fetch(SHEET_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'reset',cls,pin})});
-    const d=await r.json();
+    const d=await postJSON({action:'reset',pin});
     if(d.ok){count.server=d;pairsRender();classRender();$('pinInput').value='';
-      say(cls+' 반 결과를 지웠어요'+(d.archived?' (보관 탭으로 '+d.archived+'건 이동)':'')+'.','ok');}
+      say('결과를 모두 지웠어요'+(d.archived?' (보관 탭으로 '+d.archived+'건 이동)':'')+'.','ok');}
     else say(d.error||'지우지 못했어요.','warn');
   }catch(e){say('지우지 못했어요. 인터넷 연결을 확인해 주세요.','warn');}
   finally{btn.disabled=false;}
 }
 async function submitMine(){
-  const msg=$('submitMsg'),cls=clsVal(),pair=parseInt($('pairInput').value),t=count.my.reduce((a,b)=>a+b,0);
+  const msg=$('submitMsg'),t=count.my.reduce((a,b)=>a+b,0);
   const say=(txt,cl)=>{msg.textContent=txt;msg.className='sel '+(cl||'');};
-  if(!cls)return say('반을 입력해 주세요.','warn');
-  if(!(pair>=1&&pair<=40))return say('짝 번호를 1~40 사이로 입력해 주세요.','warn');
   if(t!==20)return say('합계가 20이 되어야 해요. 지금은 '+t+'이에요. 시작 칸을 세지 않았는지 확인해 보세요.','warn');
   const btn=$('submitBtn');btn.disabled=true;say('보내는 중…');
   try{
-    const r=await fetch(SHEET_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({cls,pair,counts:count.my})});
-    const d=await r.json();
-    if(d.ok){store.set('entropy-cls',cls);store.set('entropy-pair',String(pair));count.server=d;pairsRender();classRender();
-      say('제출했어요! 다시 제출하면 새 값으로 바뀌어요.','ok');}
+    const d=await postJSON({id:deviceId,counts:count.my});
+    if(d.ok){count.server=d;pairsRender();classRender();say('제출했어요! 이 기기에서 다시 제출하면 새 값으로 바뀌어요.','ok');}
     else say(d.error||'제출하지 못했어요. 다시 시도해 주세요.','warn');
   }catch(e){say('제출하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.','warn');}
   finally{btn.disabled=false;}
@@ -911,6 +904,7 @@ function loop(t){
 const tabs=[...document.querySelectorAll('nav.tabs button')];
 const PANELS={urn:()=>urnRender(),count:()=>countRender(),dice:()=>diceRender(),heat:()=>heatRender()};
 function show(name){
+  if(name==='teacher')name='count';
   if(!PANELS[name])name='urn';
   Object.keys(sims).forEach(k=>{if(k!==name&&sims[k].run)setRun(k,false);});
   tabs.forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===name));
@@ -935,7 +929,7 @@ readColors();
 urn.side=new Uint8Array(urn.N);
 urnReset();diceSetup();heatReset();
 if(SHEET_API)onlineInit();
-show(location.hash.slice(1)||'urn');
+show(location.hash.slice(1)||(SHEET_API&&isTeacherMode()?'count':'urn'));
 })();
 </script>
 </body>

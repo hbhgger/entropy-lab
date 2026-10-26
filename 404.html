@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>엔트로피 실험실로 이동 중</title>
+<script>
+// 잘못 입력한 주소(예: /entropy-lab/&teacher=1)를 실험실로 돌려보낸다.
+(function(){
+  var seg=location.pathname.split('/').filter(Boolean);
+  var base='/'+(seg[0]?seg[0]+'/':'');
+  var teacher=/teacher/i.test(location.pathname+location.search+location.hash);
+  location.replace(base+(teacher?'?teacher=1#count':''));
+})();
+</script>
+</head>
+<body style="font-family:sans-serif;padding:24px">
+<p>엔트로피 실험실로 이동하고 있어요. 화면이 바뀌지 않으면 <a href="./">여기</a>를 눌러 주세요.</p>
+</body>
+</html>
