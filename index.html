@@ -149,6 +149,27 @@ h3{font-size:1.05rem;font-weight:600;margin:26px 0 6px;padding-top:14px;border-t
   font:inherit;font-size:1.1rem;font-weight:600;text-align:center;padding:0
 }
 .inputs input:focus-visible{outline:3px solid var(--blue);outline-offset:1px}
+.formrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}
+.formrow label{display:flex;flex-direction:column;font-size:.85rem;color:var(--muted);gap:3px}
+.formrow input{
+  width:100%;min-height:46px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);
+  font:inherit;font-size:1.05rem;font-weight:600;padding:0 12px
+}
+.formrow input:focus-visible{outline:3px solid var(--blue);outline-offset:1px}
+.btn.primary{background:var(--ink);color:var(--on-ink)}
+.btn:disabled{opacity:.55;cursor:default}
+.warn{color:var(--red);font-weight:600}
+.ok{color:var(--blue);font-weight:600}
+.statusrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px}
+.statusrow p{margin:0;font-size:.9rem;color:var(--muted)}
+.statusrow .btn{min-height:40px;font-size:.9rem;flex:none}
+details.teacher{border:1.5px dashed var(--line);border-radius:10px;padding:8px 14px;margin:0 0 14px;background:var(--surface)}
+details.teacher summary{font-weight:600;cursor:pointer;min-height:36px;display:flex;align-items:center}
+details.teacher .formrow{align-items:end}
+details.teacher .formrow .btn{min-height:46px}
+.btn.danger{border-color:var(--red);color:var(--red)}
+.rightbtn{text-align:right;margin:0 0 6px}
+.rightbtn .btn{min-height:40px;font-size:.9rem}
 nav.tabs button small{display:block;font-size:.72rem}
 nav.tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-top-color:var(--ink)}
 @media (max-width:380px){
@@ -236,14 +257,42 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-to
   <p class="sel" id="arrTotal" aria-live="polite"></p>
 
   <h3>학급 결과와 비교하기</h3>
-  <p class="small">칠판에 모은 학급 전체 횟수를 왼쪽 공 개수별로 입력하세요. 교사 화면에 띄워 함께 보는 용도이고, 입력값은 이 기기에만 남습니다.</p>
-  <div class="inputs" id="classInputs"></div>
+  <div id="onlineBox" hidden>
+    <p class="small">우리 짝의 결과를 제출하면 학급 합계가 자동으로 모여요. 이름은 받지 않고 반과 짝 번호만 저장합니다.</p>
+    <div class="formrow">
+      <label>반<input id="clsInput" type="text" maxlength="20" placeholder="예: 2-6" autocomplete="off"></label>
+      <label>짝 번호<input id="pairInput" type="number" min="1" max="40" inputmode="numeric" placeholder="예: 3"></label>
+    </div>
+    <p class="seglabel">우리 짝의 횟수(활동지 ‘활동 1 결과 정리’ 표)</p>
+    <div class="inputs" id="myInputs"></div>
+    <p class="sel" id="mySum">합계 0 / 20</p>
+    <button class="btn wide primary" id="submitBtn">우리 짝 결과 제출하기</button>
+    <p class="sel" id="submitMsg" aria-live="polite"></p>
+  </div>
+  <div id="manualBox">
+    <p class="small">칠판에 모은 학급 전체 횟수를 왼쪽 공 개수별로 입력하세요. 교사 화면에 띄워 함께 보는 용도이고, 입력값은 이 기기에만 남습니다.</p>
+    <div class="inputs" id="classInputs"></div>
+    <div class="rightbtn"><button class="btn" id="manualClear">입력 지우기</button></div>
+  </div>
   <canvas class="hist" id="classChart" aria-label="학급 결과와 이론 비율 비교 그래프"></canvas>
   <div class="legend">
     <span><i class="sw" style="background:var(--blue)"></i>학급에서 나온 비율</span>
     <span><i class="sw dot" style="background:var(--red)"></i>배치 수로 예상한 비율</span>
   </div>
   <p class="sel" id="classSum" aria-live="polite"></p>
+  <div class="statusrow" id="onlineStatus" hidden>
+    <p id="pairsLine" aria-live="polite"></p>
+    <button class="btn" id="refreshBtn">새로고침</button>
+  </div>
+  <details class="teacher" id="teacherBox" hidden>
+    <summary>교사용: 수업이 끝나면 결과 지우기</summary>
+    <p class="small">위에 입력된 반의 제출 결과를 지웁니다. 지운 결과는 구글 시트의 ‘보관’ 탭으로 옮겨져서 나중에도 볼 수 있어요.</p>
+    <div class="formrow">
+      <label>교사용 비밀번호<input id="pinInput" type="password" autocomplete="off"></label>
+      <button class="btn danger" id="resetBtn">이 반 결과 지우기</button>
+    </div>
+    <p class="sel" id="resetMsg" aria-live="polite"></p>
+  </details>
 
   <h3>공을 늘리면?</h3>
   <p class="seglabel">공의 개수</p>
@@ -386,6 +435,13 @@ nav.tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-to
 </nav>
 
 <script>
+/* ================================================================
+   학급 결과 자동 집계 설정
+   구글 앱스 스크립트 웹 앱 주소(https://script.google.com/macros/s/…/exec)를
+   아래 따옴표 안에 붙여 넣으세요. 비워 두면 교사 직접 입력 방식으로 동작합니다.
+   ================================================================ */
+const SHEET_API = '';
+
 (function(){
 const $=id=>document.getElementById(id);
 const rnd=n=>Math.floor(Math.random()*n);
@@ -580,20 +636,103 @@ const count={N:4,cls:[0,0,0,0,0]};
   }
   $('arrAll').addEventListener('click',()=>list.querySelectorAll('.arr').forEach(d=>{if(!d.classList.contains('open'))d.querySelector('button').click();}));
   try{const s=JSON.parse(localStorage.getItem('entropy-class')||'null');if(Array.isArray(s)&&s.length===5)s.forEach((v,i)=>count.cls[i]=Math.max(0,parseInt(v)||0));}catch(e){}
-  const box=$('classInputs');
+  makeInputs($('classInputs'),count.cls,()=>{try{localStorage.setItem('entropy-class',JSON.stringify(count.cls));}catch(e){}classRender();});
+  $('manualClear').addEventListener('click',()=>{
+    if(!confirm('입력한 학급 횟수를 모두 지울까요?'))return;
+    count.cls.fill(0);$('classInputs').querySelectorAll('input').forEach(i=>i.value='');
+    try{localStorage.removeItem('entropy-class');}catch(e){}classRender();
+  });
+})();
+function makeInputs(box,arr,onChange){
   for(let left=4;left>=0;left--){
     const lab=document.createElement('label');lab.textContent='왼쪽 '+left+'개';
-    const inp=document.createElement('input');inp.type='number';inp.min='0';inp.inputMode='numeric';inp.placeholder='0';
-    if(count.cls[left])inp.value=count.cls[left];
-    inp.addEventListener('input',()=>{count.cls[left]=Math.max(0,parseInt(inp.value)||0);try{localStorage.setItem('entropy-class',JSON.stringify(count.cls));}catch(e){}classRender();});
+    const inp=document.createElement('input');inp.type='number';inp.min='0';inp.max='20';inp.inputMode='numeric';inp.placeholder='0';
+    if(arr[left])inp.value=arr[left];
+    inp.addEventListener('input',()=>{arr[left]=Math.max(0,parseInt(inp.value)||0);onChange();});
     lab.appendChild(inp);box.appendChild(lab);
   }
-})();
+}
+/* ---------- 학급 결과 자동 집계(앱스 스크립트) ---------- */
+const store={get:k=>{try{return localStorage.getItem(k);}catch(e){return null;}},set:(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}}};
+count.online=false;count.server=null;count.my=[0,0,0,0,0];
+const clsVal=()=>$('clsInput').value.trim();
+function onlineInit(){
+  count.online=true;
+  $('onlineBox').hidden=false;$('manualBox').hidden=true;$('onlineStatus').hidden=false;
+  let q=null;try{q=new URLSearchParams(location.search).get('class');}catch(e){}
+  $('clsInput').value=(q||store.get('entropy-cls')||'').slice(0,20);
+  $('pairInput').value=store.get('entropy-pair')||'';
+  makeInputs($('myInputs'),count.my,mySumRender);mySumRender();
+  $('clsInput').addEventListener('change',()=>{store.set('entropy-cls',clsVal());count.server=null;fetchTotals();});
+  $('pairInput').addEventListener('change',()=>store.set('entropy-pair',$('pairInput').value));
+  $('submitBtn').addEventListener('click',submitMine);
+  $('refreshBtn').addEventListener('click',()=>fetchTotals(true));
+  let isTeacher=false;try{isTeacher=new URLSearchParams(location.search).has('teacher');}catch(e){}
+  if(isTeacher){$('teacherBox').hidden=false;$('resetBtn').addEventListener('click',resetClass);}
+  setInterval(()=>{if(!document.hidden&&$('panel-count').classList.contains('active'))fetchTotals();},5000);
+}
+function mySumRender(){
+  const t=count.my.reduce((a,b)=>a+b,0),el=$('mySum');
+  el.textContent='합계 '+t+' / 20'+(t===20?' ✓':'');el.className='sel '+(t===20?'ok':(t>20?'warn':''));
+}
+let fetching=false;
+async function fetchTotals(manual){
+  if(!count.online||fetching)return;
+  const cls=clsVal();
+  if(!cls){$('pairsLine').textContent='반을 입력하면 학급 결과를 불러와요.';count.server=null;classRender();return;}
+  fetching=true;if(manual)$('pairsLine').textContent='불러오는 중…';
+  try{
+    const r=await fetch(SHEET_API+'?cls='+encodeURIComponent(cls),{cache:'no-store'});
+    const d=await r.json();
+    if(d.ok&&clsVal()===cls){count.server=d;pairsRender();}
+    else if(!d.ok)$('pairsLine').textContent=d.error||'학급 결과를 불러오지 못했어요.';
+  }catch(e){
+    $('pairsLine').textContent='학급 결과를 불러오지 못했어요. 인터넷 연결을 확인하세요.';
+  }finally{fetching=false;}
+  classRender();
+}
+function pairsRender(){
+  const d=count.server;
+  $('pairsLine').textContent=d&&d.pairs.length?d.cls+' 제출한 짝: '+d.pairs.join(', ')+'번 (총 '+d.pairs.length+'쌍)':'아직 제출한 짝이 없어요.';
+}
+async function resetClass(){
+  const msg=$('resetMsg'),cls=clsVal(),pin=$('pinInput').value;
+  const say=(txt,cl)=>{msg.textContent=txt;msg.className='sel '+(cl||'');};
+  if(!cls)return say('지울 반을 위의 반 칸에 입력해 주세요.','warn');
+  if(!pin)return say('교사용 비밀번호를 입력해 주세요.','warn');
+  if(!confirm(cls+' 반의 제출 결과를 모두 지울까요?\n지운 결과는 구글 시트의 보관 탭으로 옮겨집니다.'))return;
+  const btn=$('resetBtn');btn.disabled=true;say('지우는 중…');
+  try{
+    const r=await fetch(SHEET_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'reset',cls,pin})});
+    const d=await r.json();
+    if(d.ok){count.server=d;pairsRender();classRender();$('pinInput').value='';
+      say(cls+' 반 결과를 지웠어요'+(d.archived?' (보관 탭으로 '+d.archived+'건 이동)':'')+'.','ok');}
+    else say(d.error||'지우지 못했어요.','warn');
+  }catch(e){say('지우지 못했어요. 인터넷 연결을 확인해 주세요.','warn');}
+  finally{btn.disabled=false;}
+}
+async function submitMine(){
+  const msg=$('submitMsg'),cls=clsVal(),pair=parseInt($('pairInput').value),t=count.my.reduce((a,b)=>a+b,0);
+  const say=(txt,cl)=>{msg.textContent=txt;msg.className='sel '+(cl||'');};
+  if(!cls)return say('반을 입력해 주세요.','warn');
+  if(!(pair>=1&&pair<=40))return say('짝 번호를 1~40 사이로 입력해 주세요.','warn');
+  if(t!==20)return say('합계가 20이 되어야 해요. 지금은 '+t+'이에요. 시작 칸을 세지 않았는지 확인해 보세요.','warn');
+  const btn=$('submitBtn');btn.disabled=true;say('보내는 중…');
+  try{
+    const r=await fetch(SHEET_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({cls,pair,counts:count.my})});
+    const d=await r.json();
+    if(d.ok){store.set('entropy-cls',cls);store.set('entropy-pair',String(pair));count.server=d;pairsRender();classRender();
+      say('제출했어요! 다시 제출하면 새 값으로 바뀌어요.','ok');}
+    else say(d.error||'제출하지 못했어요. 다시 시도해 주세요.','warn');
+  }catch(e){say('제출하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.','warn');}
+  finally{btn.disabled=false;}
+}
 const pct=v=>(v*100).toFixed(1)+'%';
 function classRender(){
-  const t=count.cls.reduce((a,b)=>a+b,0),obs=count.cls.map(v=>t?v/t:0);
+  const src=count.online?(count.server?count.server.byLeft:[0,0,0,0,0]):count.cls;
+  const t=src.reduce((a,b)=>a+b,0),obs=src.map(v=>t?v/t:0);
   drawDist($('classChart'),4,{obs,cur:-1,sel:-1});
-  $('classSum').textContent=t?'합계 '+fmtInt(t)+'회. 2 : 2가 나온 비율은 '+pct(obs[2])+'(배치 수로 예상하면 37.5%)예요.':'횟수를 입력하면 학급 결과 막대가 그려져요.';
+  $('classSum').textContent=t?'합계 '+fmtInt(t)+'회. 2 : 2가 나온 비율은 '+pct(obs[2])+'(배치 수로 예상하면 37.5%)예요.':(count.online?'제출된 결과가 모이면 학급 막대가 그려져요.':'횟수를 입력하면 학급 결과 막대가 그려져요.');
 }
 function countRender(){
   classRender();
@@ -776,6 +915,7 @@ function show(name){
   Object.keys(sims).forEach(k=>{if(k!==name&&sims[k].run)setRun(k,false);});
   tabs.forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+name));
+  if(name==='count'&&count.online)fetchTotals();
   redraw(name);window.scrollTo(0,0);
 }
 function redraw(name){PANELS[name]();}
@@ -794,6 +934,7 @@ if(document.fonts&&document.fonts.ready)document.fonts.ready.then(refresh);
 readColors();
 urn.side=new Uint8Array(urn.N);
 urnReset();diceSetup();heatReset();
+if(SHEET_API)onlineInit();
 show(location.hash.slice(1)||'urn');
 })();
 </script>
